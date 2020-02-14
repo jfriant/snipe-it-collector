@@ -11,3 +11,4 @@
 # End of https://www.gitignore.io/api/powershell
 
 config.json
+deploy.txt

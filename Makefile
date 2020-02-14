@@ -1,5 +1,10 @@
-.PHONY: build
+FN := deploy.txt
+DEPLOY_PATH := $(shell cat ${FN})
 
-build:
-	-rm ~/Dropbox/TMAT/software/snipe-it-collector.zip
-	zip -e ~/Dropbox/TMAT/software/snipe-it-collector.zip collector.ps1 config.json
+.PHONY: build clean
+
+build: clean
+	zip -e $(DEPLOY_PATH)/snipe-it-collector.zip collector.ps1 config.json
+
+clean:
+	-rm $(DEPLOY_PATH)/snipe-it-collector.zip
