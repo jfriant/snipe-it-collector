@@ -1,3 +1,31 @@
+##
+## Collector Script for Snipe-IT
+##
+
+<#
+.SYNOPSIS
+Collects information from the local machine to create a new asset in a Snipe-IT database
+
+.DESCRIPTION
+The script uses some WMI calls to find out the make, CPU type, etc., and then contacts the Snipe-IT database to find a matching model.  If that is found, then it attempts to create a new asset.  It avoids duplicates by searching for the Asset tag before creating a new record.
+
+.PARAMETER DryRun
+Use this flag to just print what would be updated, but do nothing to the database.
+
+.EXAMPLE
+collector.ps1 -DryRun
+
+.INPUTS
+None
+
+.OUTPUTS
+None
+#>
+Param
+(
+    [Parameter(Mandatory=$false)] [switch] $DryRun = $false
+)
+
 $ScriptDirectory = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 $config = Get-Content -Path "$ScriptDirectory\config.json" -Raw | ConvertFrom-Json
 
@@ -8,16 +36,11 @@ $standard_headers = @{
 }
 
 function get-model {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [String[]]
-        $model_number,
-        [Parameter(Mandatory=$true)]
-        [String[]]
-        $memory_amount,
-        [Parameter(Mandatory=$true)]
-        [String[]]
-        $cpu_type
+    Param
+    (
+        [Parameter(Mandatory=$true)] [String[]] $model_number,
+        [Parameter(Mandatory=$true)] [String[]] $cpu_type,
+        [Parameter(Mandatory=$true)] [String[]] $memory_amount
     )
     
     $uri = $config.baseUrl + "/api/v1/models"
@@ -25,12 +48,16 @@ function get-model {
     $response = Invoke-RestMethod -Uri $uri -Headers $standard_headers
 
     try {
-        $model_number_re = ".*" + $model_number.replace(" ", ".") + ".*"
+        $model_re = ".*" + $model_number.replace(" ", ".") + ".*"
     } catch {
-        $model_number_re = ".*[" + $model_number + "].*"
+        $model_re = ".*[" + $model_number + "].*"
     }
+
+    # TODO: do I need to do any replaces on these?
+    $mem_re = ".*$memory_amount.*"
+    $cpu_re = ".*$cpu_type.*"
     
-    $result = $response.rows | Where-Object {$_.name -match $model_number_re -and $_.name -match ".*$memory_amount.*" -and $_.name -match ".*$cpu_type.*"}
+    $result = $response.rows | Where-Object {$_.name -match $model_re -and $_.name -match $mem_re -and $_.name -match $cpu_re}
     
     if ( $result -is [array]) {
         $result = $result[0]
@@ -39,8 +66,10 @@ function get-model {
 }
 
 function get-hardware {
-
-    Param($search_term)
+    Param
+    (
+        [Parameter(Mandatory=$true)] [String[]] $search_term
+    )
     
     if ($search_term) {
         $search_arg = "&search=" + $search_term
@@ -80,21 +109,44 @@ function get-computerinfo {
     }
 
     try {
+        # Parse the CPU name, for example:
+        #   Intel(R) Core(TM) i7-4770 CPU @ 3.40GHz
+        #   Intel(R) Xeon(R) CPU E5-2640 0 @ 2.50GHz
+        #   AMD Athlon(tm) II X2 245 Processor
+        #
+        # For more info see: https://www.intel.com/content/www/us/en/processors/processor-numbers.html
+        #
         $cpu = (Get-WmiObject Win32_Processor).Name
         if ($cpu -is [array]) {
             $cpu = $cpu[0]
         }
-        if ($cpu -like "*i5*"){
-            $cpuType = "i5"
+        if ($cpu -Match "Intel\(.*\) Core\(.*\) ([im]\d)-\d.*")
+        {
+            $cpuType = $matches[1]
         }
-        elseif ($cpu -like "*i7*"){
-            $cpuType = "i7"
+        elseif ($cpu -Match "Intel\(.*\) Xeon\(.*\) CPU (E\d)-\d.*")
+        {
+            $cpuType = $matches[1]
         }
-        elseif ($cpu -like "*m7*"){
-            $cpuType = "m7"
+        elseif ($cpu -like "*Pentium*")
+        {
+            $cpuType = "Pentium"
         }
-        elseif ($cpu -like "*Xeon*"){
-            $cpuType = "Xeon"
+        elseif ($cpu -like "*Atom*")
+        {
+            $cpuType = "Atom"
+        }
+        elseif ($cpu -like "*Celeron*")
+        {
+            $cpuType = "Celeron"
+        }
+        elseif ($cpu -like "*Duo")
+        {
+            $cpuType = "Core-2-Duo"
+        }
+        else
+        {
+            $cpuType = ""
         }
     } catch {
         $cpuType = "NONE"
@@ -112,13 +164,10 @@ function get-computerinfo {
 }
 
 function new-asset {
-    Param(
-        [Parameter(Mandatory=$true)]
-        [PSObject]
-        $computer_info,
-        [Parameter(Mandatory=$true)]
-        [PSObject]
-        $model_info
+    Param
+    (
+        [Parameter(Mandatory=$true)] [PSObject] $computer_info,
+        [Parameter(Mandatory=$true)] [PSObject] $model_info
     )
 
     $uri = $config.baseUrl + "/api/v1/hardware"
@@ -149,18 +198,20 @@ if (([string]::IsNullOrEmpty($result))) {
 
     $this_model = get-model $my_computer.ModelNumber $my_computer.CpuType $my_computer.MemoryAmount
 
-    Write-Host "[INFO] Model ID:" $this_model.id
-    Write-Host "[INFO] Model ID:" $this_model.name
-
     if (([string]::IsNullOrEmpty($this_model))) {
-        $msg = "[WARNING] No Asset Model found for: " + $my_computer.ModelNumber + " [" + $my_computer_CpuType + "] [" + $my_computer.MemoryAmount + "]"
+        $msg = "[WARNING] No Asset Model found for: " + $my_computer.ModelNumber + " [" + $my_computer.CpuType + "] [" + $my_computer.MemoryAmount + "]"
         write-host $msg
     } else {
-        Write-Host "[INFO] Add new asset"
+        if ($dryrun -eq $false) {
+            Write-Host "[INFO] Adding a new asset for" $this_model.id
 
-        $result = new-asset $my_computer $this_model
-        write-host "[INFO] new-asset result:" $result
+            $result = new-asset $my_computer $this_model
+            write-host "[INFO] new-asset result:" $result
+        } else {
+            $msg = "Would create a new asset [" + $my_computer.AssetTag + "] for model [" + $this_model.name + "]"
+            Write-Host "[DEBUG]" $msg
+        }
     }
 } else {
-    Write-Host "Asset already exists:" $result
+    Write-Host "[INFO] Asset already exists:" $result
 }
