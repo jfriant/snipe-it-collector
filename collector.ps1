@@ -158,6 +158,7 @@ function get-computerinfo {
         'MemoryAmount'    = $memoryAmount
         'ModelNumber'     = $modelno
         'CpuType'         = $cpuType
+        'UserName'        = $env:USERNAME
     }
     $computer_info = New-Object PSObject -Property $hash
     return $computer_info
@@ -177,6 +178,7 @@ function new-asset {
         "status_id" = "2"
         "model_id"  = $model_info.id
         "name"      = $computer_info.ComputerName
+        "notes"     = "Current username is " + $computer_info.UserName
     }
     $json = $payload | ConvertTo-Json
     $response = Invoke-RestMethod -Method 'Post' -Uri $uri -Headers $standard_headers -Body $json -ContentType 'application/json'
@@ -194,7 +196,7 @@ Write-Host "[INFO] Model Name:" $my_computer.ModelNumber
 
 $result = get-hardware $my_computer.AssetTag
 
-if (([string]::IsNullOrEmpty($result))) {
+if (([string]::IsNullOrEmpty($result)) -or $dryrun -eq $true) {
 
     $this_model = get-model $my_computer.ModelNumber $my_computer.CpuType $my_computer.MemoryAmount
 
@@ -208,10 +210,12 @@ if (([string]::IsNullOrEmpty($result))) {
             $result = new-asset $my_computer $this_model
             write-host "[INFO] new-asset result:" $result
         } else {
+            write-host "[DEBUG]" $my_computer
             $msg = "Would create a new asset [" + $my_computer.AssetTag + "] for model [" + $this_model.name + "]"
             Write-Host "[DEBUG]" $msg
         }
     }
 } else {
+    # TODO: should this script update an existing asset?
     Write-Host "[INFO] Asset already exists:" $result
 }
