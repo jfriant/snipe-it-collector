@@ -86,6 +86,9 @@ class ComputerInfo:
         with open('/sys/devices/virtual/dmi/id/product_name', 'rb') as fd:
             self.model_number = fd.readline().decode().strip()
 
+    def set_asset_tag(self, assettag):
+        self.asset_tag = assettag
+
 
 class SnipeIt:
     def __init__(self, base_url, api_key):
@@ -137,6 +140,7 @@ class SnipeIt:
 def main():
     parser = argparse.ArgumentParser(description="Create a new asset in Snipe-IT for the local computer")
     parser.add_argument('-n', '--dryrun', action='store_true')
+    parser.add_argument('-a', '--assettag', default=None)
 
     args = parser.parse_args()
 
@@ -149,6 +153,8 @@ def main():
     # collect the computer info
     my_computer = ComputerInfo()
     my_computer.get_all()
+    if args.assettag is not None:
+        my_computer.set_asset_tag(args.assettag)
 
     # check the database for the current asset tag
     result = snipeit_api.find_existing_asset(my_computer.asset_tag)
@@ -158,8 +164,13 @@ def main():
         this_model = snipeit_api.find_model(my_computer.model_number, my_computer.cpu_type, my_computer.memory)
         if this_model:
             if not args.dryrun:
-                result = snipeit_api.new_asset(my_computer, this_model)
-                print(result)
+                if my_computer.asset_tag != "":
+                    result = snipeit_api.new_asset(my_computer, this_model)
+                    print(result)
+                else:
+                    print("[ERROR] Cannot add an asset with a blank tag")
+                    print("[INFO] Try running: sudo cat /sys/devices/virtual/dmi/id/board_serial")
+                    print("[INFO] Then run this script with -a ASSET_TAG")
             else:
                 print("[DEBUG] Dry run, just displaying computer info...")
                 print("[DEBUG] Model found:")
