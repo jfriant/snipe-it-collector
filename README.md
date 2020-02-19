@@ -16,7 +16,7 @@ To make it easier to deploy to remote machines, I created a makefile that packag
 /home/username/Dropbox/deploy
 ```
 
-If you leave teh deploy file empty, the makefile will attempt to create the file in your root folder (Linux) and that is probably not what you want.
+If you do not have a ```deploy.txt``` file and run the makefile, it will attempt to create the file in your root folder (Linux) and that is probably not what you want.
 
 # References
 
