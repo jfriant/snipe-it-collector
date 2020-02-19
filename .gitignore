@@ -12,3 +12,6 @@
 
 config.json
 deploy.txt
+
+.idea/
+.vscode/

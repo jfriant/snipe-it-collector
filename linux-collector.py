@@ -8,7 +8,6 @@ import re
 import requests
 import subprocess
 
-# Intel(R) Core(TM) i7-4770 CPU @ 3.40GHz
 CPU_REGEX = [
     r'Intel\(R\)[ ]Core\(TM\)[ ](\w\d)[-]\d+',
     r'Intel\(.*\)[ ]Xeon\(.*\)[ ]CPU[ ](E\d)[-]\d',
