@@ -116,38 +116,28 @@ function get-computerinfo {
         #
         # For more info see: https://www.intel.com/content/www/us/en/processors/processor-numbers.html
         #
+        $CPU_REGEX = @(
+            "Intel\(.*\) Core\(.*\) ([im]\d)-\d.*",
+            "Intel\(.*\) Xeon\(.*\) CPU (E\d)-\d.*",
+            ".*(Pentium|Atom|Celeron).*",
+            "AMD Athlon\(.*\) II X\d (\d+)"
+        )
         $cpu = (Get-WmiObject Win32_Processor).Name
         if ($cpu -is [array]) {
             $cpu = $cpu[0]
         }
-        if ($cpu -Match "Intel\(.*\) Core\(.*\) ([im]\d)-\d.*")
-        {
-            $cpuType = $matches[1]
+        $cpuType = ""
+        foreach ($filter in $CPU_REGEX) {
+            if ($cpu -Match $filter)
+            {
+                $cpuType = $matches[1]
+                break
+            }
         }
-        elseif ($cpu -Match "Intel\(.*\) Xeon\(.*\) CPU (E\d)-\d.*")
-        {
-            $cpuType = $matches[1]
-        }
-        elseif ($cpu -like "*Pentium*")
-        {
-            $cpuType = "Pentium"
-        }
-        elseif ($cpu -like "*Atom*")
-        {
-            $cpuType = "Atom"
-        }
-        elseif ($cpu -like "*Celeron*")
-        {
-            $cpuType = "Celeron"
-        }
-        elseif ($cpu -like "*Duo")
-        {
-            $cpuType = "Core-2-Duo"
-        }
-        else
-        {
-            $cpuType = ""
-        }
+        # elseif ($cpu -like "*Duo")
+        # {
+        #     $cpuType = "Core-2-Duo"
+        # }
     } catch {
         $cpuType = "NONE"
     }

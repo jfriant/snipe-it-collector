@@ -75,11 +75,13 @@ class ComputerInfo:
                     break
         # Convert the memory value to gigabytes
         if unit == 'B':
-            factor = 1024 * 1024 * 1024
+            factor = 1073741824
         elif unit == 'kB':
-            factor = 1024 * 1024
-        else:
+            factor = 1048576
+        elif unit == 'mB':
             factor = 1024
+        else:
+            factor = 1
         try:
             self.memory = int(math.ceil(int(amt) / factor))
         except ValueError:
