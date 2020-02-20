@@ -9,9 +9,10 @@ import requests
 import subprocess
 
 CPU_REGEX = [
-    r'Intel\(R\)[ ]Core\(TM\)[ ](\w\d)[-]\d+',
-    r'Intel\(.*\)[ ]Xeon\(.*\)[ ]CPU[ ](E\d)[-]\d',
-    r'.*(Pentium|Atom|Celeron).*',
+    (r'Intel\(R\)[ ]Core\(TM\)[ ](\w\d)[-]\d+', '{}'),
+    (r'Intel\(.*\)[ ]Xeon\(.*\)[ ]CPU[ ](E\d)[-]\d', '{}'),
+    (r'.*(Pentium|Atom|Celeron).*', '{}'),
+    (r'AMD Athlon\(tm\) II X\d (\d+)', 'AII{}')
 ]
 
 
@@ -53,10 +54,10 @@ class ComputerInfo:
                 if this_line.startswith('model name'):
                     break
         if this_line != "":
-            for pattern in CPU_REGEX:
+            for pattern, fmt_result in CPU_REGEX:
                 result = re.search(pattern, this_line)
                 if result:
-                    self.cpu_type = result.group(1)
+                    self.cpu_type = fmt_result.format(result.group(1))
                     break
 
     def get_hostname(self):
