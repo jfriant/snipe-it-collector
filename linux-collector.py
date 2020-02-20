@@ -19,7 +19,7 @@ CPU_REGEX = [
 class ComputerInfo:
     def __init__(self):
         self.name = ""
-        self.asset_tag = ""
+        self.asset_tag = None
         self.memory = 0
         self.model_number = ""
         self.cpu_type = ""
@@ -34,19 +34,21 @@ class ComputerInfo:
 """.format(**self.__dict__)
         return s_out
 
-    def get_all(self):
-        self.get_asset_tag()
-        self.get_cpu_type()
-        self.get_hostname()
-        self.get_memory_amount()
-        self.get_model_number()
+    def read_all(self):
+        self.read_asset_tag()
+        self.read_cpu_type()
+        self.read_hostname()
+        self.read_memory_amount()
+        self.read_model_number()
 
-    def get_asset_tag(self):
+    def read_asset_tag(self):
         with open('/sys/devices/virtual/dmi/id/board_asset_tag', 'rb') as fd:
             output = fd.readline()
-        self.asset_tag = output.decode().strip()
+        result = output.decode().strip()
+        if result != "":
+            self.asset_tag = result
 
-    def get_cpu_type(self):
+    def read_cpu_type(self):
         this_line = ""
         with open('/proc/cpuinfo', 'rb') as fd:
             for line in fd:
@@ -60,12 +62,12 @@ class ComputerInfo:
                     self.cpu_type = fmt_result.format(result.group(1))
                     break
 
-    def get_hostname(self):
+    def read_hostname(self):
         # Host name
         output = subprocess.check_output('/bin/hostname')
         self.name = output.decode().strip()
 
-    def get_memory_amount(self):
+    def read_memory_amount(self):
         with open('/proc/meminfo', 'rb') as fd:
             for line in fd:
                 if line.startswith(b'MemTotal'):
@@ -83,12 +85,15 @@ class ComputerInfo:
         except ValueError:
             self.memory = -1
 
-    def get_model_number(self):
+    def read_model_number(self):
         with open('/sys/devices/virtual/dmi/id/product_name', 'rb') as fd:
             self.model_number = fd.readline().decode().strip()
 
     def set_asset_tag(self, assettag):
         self.asset_tag = assettag
+
+    def set_model(self, model):
+        self.model_number = model
 
 
 class SnipeIt:
@@ -101,14 +106,15 @@ class SnipeIt:
         }
 
     def find_existing_asset(self, asset_tag):
-        url = self.base_url + "/api/v1/hardware"
-        querystring = {'search': asset_tag, 'sort': 'created_at', 'order': 'desc', 'limit': '1'}
-        response = requests.request("GET", url, headers=self.headers, params=querystring)
-        output = json.loads(response.text)
-        if output['total'] > 0:
-            return output['rows'][0]
-        else:
-            return None
+        result = None
+        if asset_tag is not None:
+            url = self.base_url + "/api/v1/hardware"
+            querystring = {'search': asset_tag, 'sort': 'created_at', 'order': 'desc', 'limit': '1'}
+            response = requests.request("GET", url, headers=self.headers, params=querystring)
+            output = json.loads(response.text)
+            if output['total'] > 0:
+                result = output['rows'][0]
+        return result
 
     def find_model(self, model_number, cpu_type, memory_amount):
         url = self.base_url + "/api/v1/models"
@@ -140,12 +146,13 @@ class SnipeIt:
 
 def main():
     parser = argparse.ArgumentParser(description="Create a new asset in Snipe-IT for the local computer")
-    parser.add_argument('-n', '--dryrun', action='store_true')
-    parser.add_argument('-a', '--assettag', default=None)
+    parser.add_argument('-n', '--dryrun', action='store_true', help='No updates, just print what would be done')
+    parser.add_argument('-a', '--asset-tag', default=None, metavar='ID', help='Override the Asset Tag')
+    parser.add_argument('-m', '--model', default=None, metavar='NAME', help='Override the Model Name')
 
     args = parser.parse_args()
 
-    # read the config.json
+    # read the API key and base URL from the configuration file in the current directory
     with open('config.json') as fd:
         config = json.load(fd)
 
@@ -153,9 +160,11 @@ def main():
 
     # collect the computer info
     my_computer = ComputerInfo()
-    my_computer.get_all()
-    if args.assettag is not None:
-        my_computer.set_asset_tag(args.assettag)
+    my_computer.read_all()
+    if args.asset_tag is not None:
+        my_computer.set_asset_tag(args.asset_tag)
+    if args.model is not None:
+        my_computer.set_model(args.model)
 
     # check the database for the current asset tag
     result = snipeit_api.find_existing_asset(my_computer.asset_tag)
@@ -165,7 +174,7 @@ def main():
         this_model = snipeit_api.find_model(my_computer.model_number, my_computer.cpu_type, my_computer.memory)
         if this_model:
             if not args.dryrun:
-                if my_computer.asset_tag != "":
+                if my_computer.asset_tag is not None:
                     result = snipeit_api.new_asset(my_computer, this_model)
                     print(result)
                 else:
