@@ -86,26 +86,26 @@ function get-hardware {
 
 function get-computerinfo {
     try {
-        $assetTag = (Get-WmiObject win32_bios).SerialNumber
+        $assetTag = (Get-CimInstance win32_bios).SerialNumber
     } catch {
-        $assetTag = "NONE"
+        $assetTag = "ERROR"
     }
     
     $computerName = $env:COMPUTERNAME
     try {
-        $cs = (Get-WmiObject -class Win32_ComputerSystem).TotalPhysicalMemory
+        $cs = (Get-CimInstance -class Win32_ComputerSystem).TotalPhysicalMemory
         $memoryAmount = [math]::Ceiling($cs / 1024 / 1024 / 1024)
     } catch {
         $memoryAmount = 0
     }
 
     try {
-        $modelno = (Get-WmiObject -class Win32_ComputerSystem).Model
+        $modelno = (Get-CimInstance -class Win32_ComputerSystem).Model
         if ($modelno -is [array]) {
             $modelno = $modelno[0]
         }
     } catch {
-        $modelno = "NONE"
+        $modelno = "ERROR"
     }
 
     try {
@@ -122,7 +122,7 @@ function get-computerinfo {
             ".*(Pentium|Atom|Celeron).*",
             "AMD Athlon\(.*\) II X\d (\d+)"
         )
-        $cpu = (Get-WmiObject Win32_Processor).Name
+        $cpu = (Get-CimInstance Win32_Processor).Name
         if ($cpu -is [array]) {
             $cpu = $cpu[0]
         }
@@ -139,7 +139,7 @@ function get-computerinfo {
         #     $cpuType = "Core-2-Duo"
         # }
     } catch {
-        $cpuType = "NONE"
+        $cpuType = "ERROR"
     }
     
     $hash = @{
