@@ -59,6 +59,32 @@ function get-model {
     
     $result = $response.rows | Where-Object {$_.name -match $model_re -and $_.name -match $mem_re -and $_.name -match $cpu_re}
     
+    # we can add a missing model 
+    if (!$result) {
+        if ($model_number -is [array]) {
+            $my_model_name = $model_number[0];
+        } else {
+            $my_model_name = $model_number;
+        }
+        $payload = @{
+            "name" = $my_model_name + "/" + $cpu_type + " " + $memory_amount + "GB"
+            "model_number" = $my_model_name
+            "manufacturer_id" = 4  # Custom
+            "eol"  = 72  # Months
+            "fieldset_id" = 4  # General Computer Information
+            "category_id" = 6  # Auto Import Hardware
+        }
+        $json = $payload | ConvertTo-Json
+        $response = Invoke-RestMethod -Method 'Post' -Uri $uri -Headers $standard_headers -Body $json -ContentType 'application/json'
+        if ($response.status -eq "success") {
+            Write-Host $response.messages
+            throw "please re-run script"
+        } else {
+            Write-Host $response.messages
+            throw "could not create model"
+        }
+    }
+
     if ( $result -is [array]) {
         $result = $result[0]
     }
@@ -118,7 +144,8 @@ function get-computerinfo {
         #
         $CPU_REGEX = @(
             "Intel\(.*\) Core\(.*\) ([im]\d)-\d.*",
-            "Intel\(.*\) Xeon\(.*\) CPU (E\d)-\d.*",
+            "Intel\(.*\) Xeon\(.*\) CPU\s+(E\d)-\d.*",
+            "Intel\(.*\) Xeon\(.*\) CPU\s+(E\d+).*",
             ".*(Pentium|Atom|Celeron).*",
             "AMD Athlon\(.*\) II X\d (\d+)"
         )
@@ -191,7 +218,7 @@ if (([string]::IsNullOrEmpty($result)) -or $dryrun -eq $true) {
     $this_model = get-model $my_computer.ModelNumber $my_computer.CpuType $my_computer.MemoryAmount
 
     if (([string]::IsNullOrEmpty($this_model))) {
-        $msg = "[WARNING] No Asset Model found for: " + $my_computer.ModelNumber + " [" + $my_computer.CpuType + "] [" + $my_computer.MemoryAmount + "]"
+        $msg = "[WARNING] No Asset Model found for: " + $my_computer.ModelNumber + "/" + $my_computer.CpuType + " " + $my_computer.MemoryAmount + "GB"
         write-host $msg
     } else {
         if ($dryrun -eq $false) {
