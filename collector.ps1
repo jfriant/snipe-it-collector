@@ -28,6 +28,14 @@ Param
 
 $ScriptDirectory = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 $config = Get-Content -Path "$ScriptDirectory\config.json" -Raw | ConvertFrom-Json
+$required_config = @('asset_manufacturer_id', 'asset_eol', 'asset_fieldset_id', 'asset_category_id')
+
+foreach ($conf_key in $required_config) {
+    if (! (Get-Member -inputobject $config -name "$conf_key" -membertype Properties)) {
+        $error_msg = '[ERROR] Config value "' + $conf_key + '" must be set in "config.json".'
+        Write-Error -Message $error_msg -ErrorAction Stop
+    }
+}
 
 $standard_headers = @{
     'Accept' = "application/json"
@@ -59,36 +67,45 @@ function get-model {
     
     $result = $response.rows | Where-Object {$_.name -match $model_re -and $_.name -match $mem_re -and $_.name -match $cpu_re}
     
-    # we can add a missing model 
-    if (!$result) {
-        if ($model_number -is [array]) {
-            $my_model_name = $model_number[0];
-        } else {
-            $my_model_name = $model_number;
-        }
-        $payload = @{
-            "name" = $my_model_name + "/" + $cpu_type + " " + $memory_amount + "GB"
-            "model_number" = $my_model_name
-            "manufacturer_id" = 4  # Custom
-            "eol"  = 72  # Months
-            "fieldset_id" = 4  # General Computer Information
-            "category_id" = 6  # Auto Import Hardware
-        }
-        $json = $payload | ConvertTo-Json
-        $response = Invoke-RestMethod -Method 'Post' -Uri $uri -Headers $standard_headers -Body $json -ContentType 'application/json'
-        if ($response.status -eq "success") {
-            Write-Host $response.messages
-            throw "please re-run script"
-        } else {
-            Write-Host $response.messages
-            throw "could not create model"
-        }
-    }
-
     if ( $result -is [array]) {
         $result = $result[0]
     }
     return $result
+}
+
+function add-model {
+    # we can add a missing model
+    Param
+    (
+        [Parameter(Mandatory=$true)] [String[]] $model_number,
+        [Parameter(Mandatory=$true)] [String[]] $cpu_type,
+        [Parameter(Mandatory=$true)] [String[]] $memory_amount
+    )
+    
+    $uri = $config.baseUrl + "/api/v1/models"
+
+    if ($model_number -is [array]) {
+        $my_model_name = $model_number[0];
+    } else {
+        $my_model_name = $model_number;
+    }
+    $payload = @{
+        "name" = $my_model_name + "/" + $cpu_type + " " + $memory_amount + "GB"
+        "model_number" = $my_model_name
+        "manufacturer_id" = $config.asset_manufacturer_id
+        "eol"  = $config.asset_eol
+        "fieldset_id" = $config.asset_fieldset_id
+        "category_id" = $config.asset_category_id
+    }
+    $json = $payload | ConvertTo-Json
+    $response = Invoke-RestMethod -Method 'Post' -Uri $uri -Headers $standard_headers -Body $json -ContentType 'application/json'
+    if ($response.status -eq "success") {
+        Write-Host $response.messages
+    } else {
+        Write-Host $response.messages
+        throw "could not create model"
+    }
+    return $true
 }
 
 function get-hardware {
@@ -220,7 +237,21 @@ if (([string]::IsNullOrEmpty($result)) -or $dryrun -eq $true) {
     if (([string]::IsNullOrEmpty($this_model))) {
         $msg = "[WARNING] No Asset Model found for: " + $my_computer.ModelNumber + "/" + $my_computer.CpuType + " " + $my_computer.MemoryAmount + "GB"
         write-host $msg
+        $user_ans = Read-Host -Prompt "Do you want to add this model (y/N)?"
+        if ($user_ans -eq "Y" -or $user_ans -eq "y") {
+            $result = add-model $my_computer.ModelNumber $my_computer.CpuType $my_computer.MemoryAmount
+            if ($result) {
+                $this_model = get-model $my_computer.ModelNumber $my_computer.CpuType $my_computer.MemoryAmount
+                $add_asset = $true
+            }
+        } else {
+            $add_asset = $false
+        }
     } else {
+        $add_asset = $true
+    }
+    
+    if ($add_asset) {
         if ($dryrun -eq $false) {
             Write-Host "[INFO] Adding a new asset for" $this_model.id
 
