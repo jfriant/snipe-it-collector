@@ -28,6 +28,7 @@ Param
 
 $ScriptDirectory = Split-Path -Path $MyInvocation.MyCommand.Definition -Parent
 $config = Get-Content -Path "$ScriptDirectory\config.json" -Raw | ConvertFrom-Json
+Write-Debug $config
 $required_config = @('asset_manufacturer_id', 'asset_eol', 'asset_fieldset_id', 'asset_category_id')
 
 foreach ($conf_key in $required_config) {
@@ -92,10 +93,23 @@ function add-model {
     $payload = @{
         "name" = $my_model_name + "/" + $cpu_type + " " + $memory_amount + "GB"
         "model_number" = $my_model_name
-        "manufacturer_id" = $config.asset_manufacturer_id
         "eol"  = $config.asset_eol
-        "fieldset_id" = $config.asset_fieldset_id
-        "category_id" = $config.asset_category_id
+    }
+    if ($config.asset_manufacturer_id -ne 0) {
+        $payload.add("manufacturer_id", $config.asset_manufacturer_id)
+    } else {
+        write-host "ERROR: you must specify a valid default ID for the Manufacturer ID in the config.json file."
+        return $false
+    }
+    if ($config.asset_category_id -ne 0) {
+        $payload.add("category_id", $config.asset_category_id)
+    } else {
+        write-host "ERROR: you must specify a valid default ID for the Category ID in the config.json file."
+        return $false
+    }
+    # Note the custom field is optional
+    if ($config.asset_fieldset_id -ne 0) {
+        $payload.add("fieldset_id", $config.asset_fieldset_id)
     }
     $json = $payload | ConvertTo-Json
     $response = Invoke-RestMethod -Method 'Post' -Uri $uri -Headers $standard_headers -Body $json -ContentType 'application/json'

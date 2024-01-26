@@ -1,7 +1,13 @@
 # snipe-it-collector
 Single-script agent to create new Assets in a Snipe-IT database
 
-The API key and base URL for your server need to be in a file called "config.json".  There are also a few other values required to be able to create an Asset Model if necessary:
+The API key and base URL for your server need to be in a file called "config.json".
+
+IMPORTANT: if you want to use the script to create an Asset Model before adding the asset, you must fill in the values for asset_manufacturer_id and asset_category_id that match the ID of the defaults you want to use.
+
+For example, you would create a new manufacturer under Settings -> Manufacturers, make a note of the ID of the new record and fill in that value here.  The same can be done for category (Settings -> Categories).
+
+The Field Set is optional and can be used to create the asset model with a custom field (Settings -> Custom Fields).
 
 ```json
 {
